@@ -1,4 +1,4 @@
-name: Make TikTok Video
+name: Make TikTok Video v1
 
 on:
   workflow_dispatch:
