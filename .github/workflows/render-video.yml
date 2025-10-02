@@ -1,4 +1,4 @@
-name: Make TikTok Video v1
+name: Test TikTok Video
 
 on:
   workflow_dispatch:
@@ -10,26 +10,21 @@ on:
         description: "Public audio URL"
         required: true
       filename:
-        description: "Output filename (optional)"
+        description: "Output filename"
         required: false
         default: "video.mp4"
 
 jobs:
-  render:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install ffmpeg
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ffmpeg curl unzip
-          curl -fsSLO https://downloads.rclone.org/rclone-current-linux-amd64.zip
-          unzip rclone-current-linux-amd64.zip
-          sudo cp rclone-*-linux-amd64/rclone /usr/bin/
-          sudo chown root:root /usr/bin/rclone
-          rclone --version
+          sudo apt-get install -y ffmpeg curl
 
       - name: Set variables
         id: vars
@@ -37,56 +32,22 @@ jobs:
           IMAGE="${{ github.event.inputs.image_url }}"
           AUDIO="${{ github.event.inputs.audio_url }}"
           OUTNAME="${{ github.event.inputs.filename }}"
-          if [ -z "$OUTNAME" ]; then
-            TIMESTAMP=$(date --utc +"%Y%m%dT%H%M%SZ")
-            OUTNAME="render-${TIMESTAMP}.mp4"
-          fi
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
           echo "AUDIO=$AUDIO" >> $GITHUB_ENV
           echo "OUTNAME=$OUTNAME" >> $GITHUB_ENV
 
       - name: Download image and audio
         run: |
-          DIR=$(mktemp -d)
-          curl -fSL "$IMAGE" -o "$DIR/image"
-          curl -fSL "$AUDIO" -o "$DIR/audio"
-          echo "DIR=$DIR" >> $GITHUB_ENV
+          curl -fSL "$IMAGE" -o image
+          curl -fSL "$AUDIO" -o audio
 
-      - name: Run ffmpeg
+      - name: Build video with ffmpeg
         run: |
-          DIR="$DIR"
-          OUT="$DIR/$OUTNAME"
-          ffmpeg -y -loop 1 -i "$DIR/image" -i "$DIR/audio" \
+          ffmpeg -y -loop 1 -i image -i audio \
             -c:v libx264 -tune stillimage -r 30 -pix_fmt yuv420p \
             -c:a aac -b:a 192k \
             -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" \
-            -shortest "$OUT"
-          echo "OUT=$OUT" >> $GITHUB_ENV
+            -shortest "$OUTNAME"
 
-      - name: Configure rclone (Service Account)
-        env:
-          SERVICE_JSON: ${{ secrets.RCLONE_SERVICE_JSON }}
-        run: |
-          mkdir -p ~/.config/rclone
-          echo "$SERVICE_JSON" > ~/.config/rclone/sa.json
-          cat > ~/.config/rclone/rclone.conf <<EOF
-[gdrive]
-type = drive
-scope = drive
-service_account_file = ~/.config/rclone/sa.json
-token = {}
-EOF
-
-      - name: Upload to Google Drive
-        env:
-          REMOTE_NAME: ${{ secrets.RCLONE_REMOTE_NAME }}
-        run: |
-          OUT="$OUT"
-          rclone copy "$OUT" "$REMOTE_NAME" --progress -v
-
-      - name: Generate public link
-        env:
-          REMOTE_NAME: ${{ secrets.RCLONE_REMOTE_NAME }}
-        run: |
-          OUTNAME="${{ github.event.inputs.filename }}"
-          rclone link "$REMOTE_NAME/$OUTNAME"
+      - name: List output
+        run: ls -lh
