@@ -1,4 +1,4 @@
-name: Test TikTok Video
+name: Test TikTok Video - Optimized
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
       - name: Install ffmpeg
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ffmpeg curl
+          sudo apt-get install -y ffmpeg
 
       - name: Set variables
         id: vars
@@ -36,14 +36,9 @@ jobs:
           echo "AUDIO=$AUDIO" >> $GITHUB_ENV
           echo "OUTNAME=$OUTNAME" >> $GITHUB_ENV
 
-      - name: Download image and audio
+      - name: Build video with ffmpeg (optimized)
         run: |
-          curl -fSL "$IMAGE" -o image
-          curl -fSL "$AUDIO" -o audio
-
-      - name: Build video with ffmpeg
-        run: |
-          ffmpeg -y -loop 1 -i image -i audio \
+          ffmpeg -y -threads 2 -loop 1 -i "$IMAGE" -i "$AUDIO" \
             -c:v libx264 -tune stillimage -r 30 -pix_fmt yuv420p \
             -c:a aac -b:a 192k \
             -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" \
